@@ -1,0 +1,99 @@
+private async static void PushDiagnostic(string topic, DataRow dr, IProducer<string, string>? p)
+{
+    try
+    {
+        string id = dr["Id"].ToString();
+
+        DiagnosticData diagnosticData = new DiagnosticData();
+        diagnosticData.file_name = dr["FileName"].ToString();
+        diagnosticData.data_size = Convert.ToInt32(dr["DataLength"].ToString());
+        diagnosticData.buff_count = Convert.ToInt32(dr["PacketCount"].ToString());
+        diagnosticData.buff_index = Convert.ToInt32(dr["PacketIndex"].ToString());
+        diagnosticData.buff_bytes = dr["Content"].ToString();
+        diagnosticData.deviceno = dr["DeviceNo"].ToString();
+
+        string data = JsonHelper.Serialize(diagnosticData);
+
+        LogHelper.Write("PushDiagnostic " + topic + " " + id+" "+data);
+
+        var result = await p.ProduceAsync(topic, new Message<string, string> { Value = data });
+
+        LogHelper.Write("PushDiagnostic " + topic + " " + id+ " 队列result位置:"+result.TopicPartitionOffset);
+
+        if (!gDiagnosticIds.ContainsKey(id))
+        {
+            gDiagnosticIds.TryAdd(id, DateTime.Now);
+        }
+
+    }
+    catch (Exception ex)
+    {
+        LogHelper.Write("PushDiagnostic Error:" + ex.Message + "," + ex.StackTrace);
+    }
+}
+
+
+
+ public static void ProcessDiagnostic()
+        {
+            while (bDiagnosticFlag)
+            {
+
+                try
+                {
+
+                   var config = new ProducerConfig { BootstrapServers = kafkaServer, Acks = Acks.All, MessageSendMaxRetries = 2147483647, EnableIdempotence=true,RequestTimeoutMs= 30000};
+
+                    using (var p = new ProducerBuilder<string, string>(config).Build())
+                    {
+
+                        p.Flush();
+
+                        string sql = "select * from (SELECT max([PacketCount]) as PacketCount,[FileName],count(id) as CountId FROM [DiagnosticData] a where DATEADD(day,-1,getdate())<CreatedDate and not exists(select id from DiagnosticSendLog b with(nolock) where a.ID=b.ID)  group by FileName) c where PacketCount=CountId";
+
+                        DataSet ds = DbHelperSQL.QueryByBase(sql);
+
+                        LogHelper.Write("Diagnostic cout:" + ds.Tables[0].Rows.Count);
+
+                        if (ds!=null && ds.Tables[0].Rows.Count>0)
+                        {
+                            for(int i=0;i< ds.Tables[0].Rows.Count;i++)
+                            {
+                                string fileName = ds.Tables[0].Rows[i]["FileName"].ToString();
+
+                                LogHelper.Write("Diagnostic fileName:" + fileName);
+
+                                sql = "select * from DiagnosticData with(lock) where filename='" + fileName + "' order by PacketIndex";
+
+
+
+                                DataSet dsFile = DbHelperSQL.QueryByBase(sql);
+
+                                LogHelper.Write("Diagnostic file count:" + dsFile.Tables[0].Rows.Count);
+
+                                for (int j=0;j<dsFile.Tables[0].Rows.Count;j++)
+                                {
+                                    LogHelper.Write("Diagnostic file filename:" + fileName+" j:"+j);
+
+                                    DataRow dr = dsFile.Tables[0].Rows[j];
+
+                                    PushDiagnostic("escalator_file", dr, p);
+
+                                    //Thread.Sleep
+                                }
+
+                            }
+                        }
+
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Write("ProcessDiagnostic Error:" + ex.Message + "," + ex.StackTrace);
+                }
+
+                Thread.Sleep(1000 * 300);
+            }
+
+            //MalStartTime = MalEndTime;
+        }

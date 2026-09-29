@@ -98,7 +98,8 @@ internal static class Program
 
         {
 
-            var config = new ProducerConfig { BootstrapServers = kafkaServer, Acks = Acks.All, MessageSendMaxRetries = 5, EnableIdempotence = true, RequestTimeoutMs = 30000 };
+            var config = new ProducerConfig { BootstrapServers = kafkaServer, Acks = Acks.All, 
+            MessageSendMaxRetries = 5, EnableIdempotence = true, RequestTimeoutMs = 60000 };
 
 
 

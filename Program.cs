@@ -1,3 +1,5 @@
+// 改进代码
+
 using System.Collections.Concurrent;
 
 using Confluent.Kafka;
@@ -98,8 +100,21 @@ internal static class Program
 
         {
 
-            var config = new ProducerConfig { BootstrapServers = kafkaServer, Acks = Acks.All, 
-            MessageSendMaxRetries = 5, EnableIdempotence = true, RequestTimeoutMs = 60000 };
+            var config = new ProducerConfig
+            {
+                BootstrapServers = kafkaServer,
+                Acks = Acks.All,
+                MessageSendMaxRetries = 5,
+                EnableIdempotence = true,
+                RequestTimeoutMs = 60000
+                // 从默认 100ms 加到 1 秒。
+                // ReconnectBackoffMs = 1000,
+                // ReconnectBackoffMaxMs = 10000,
+                // // 开启 TCP KeepAlive，让客户端和 Kafka broker 的连接在空闲时也能定期探测是否还活着
+                // SocketKeepaliveEnable = true,
+                // // 从默认 100ms 加到 1 秒。
+                // RetryBackoffMs = 1000
+            };
 
 
 
@@ -117,7 +132,7 @@ internal static class Program
 
                 var tasks = new List<Task>();
 
-                for (int j = 0; j < 50; j++)
+                for (int j = 0; j < 500; j++)
 
                 {
 
@@ -144,6 +159,7 @@ internal static class Program
             LogHelper.Write("ProcessDiagnostic Error:" + ex.Message + "," + ex.StackTrace);
 
         }
+        Thread.Sleep(1000 * 300);
 
     }
 
